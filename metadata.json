@@ -1,0 +1,6 @@
+{
+  "name": "Mohd Digital Marketing - Enterprise B2B Suite",
+  "description": "Enterprise digital marketing management suite for local businesses, clinics, and fitness studios with ASP.NET Core & SQL Server backend simulation, Instagram post approval workflows, unified WhatsApp CRM, and client analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
