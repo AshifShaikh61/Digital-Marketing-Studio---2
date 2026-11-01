@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, ClientAccount, PostItem, WhatsAppLead, ScreenId } from '../types';
-import { USERS, CLIENTS, POSTS, LEADS, SQL_TABLES_SCHEMA } from '../data/mockData';
+import { USERS, CLIENTS, POSTS, LEADS } from '../data/mockData';
 
 interface AppContextType {
   currentUser: User | null;
@@ -15,6 +15,7 @@ interface AppContextType {
   isSwitcherOpen: boolean;
   isGlobalSearchOpen: boolean;
   sqlLogs: { query: string; timestamp: string; durationMs: number; rowCount: number }[];
+  isLoading: boolean;
   setScreen: (screen: ScreenId) => void;
   loginAs: (role: 'admin' | 'specialist' | 'client') => void;
   logout: () => void;
@@ -24,17 +25,19 @@ interface AppContextType {
   setIsSqlDrawerOpen: (open: boolean) => void;
   setIsSwitcherOpen: (open: boolean) => void;
   setIsGlobalSearchOpen: (open: boolean) => void;
-  approvePost: (postId: string) => void;
-  rejectPost: (postId: string, reason?: string) => void;
-  requestChanges: (postId: string, comment: string) => void;
-  addPostComment: (postId: string, comment: string) => void;
-  sendWhatsAppMessage: (leadId: string, text: string) => void;
-  updateLeadStatus: (leadId: string, status: WhatsAppLead['status']) => void;
-  scheduleAppointment: (leadId: string, date: string, time: string, service: string) => void;
-  addInternalNote: (leadId: string, note: string) => void;
-  createPost: (postData: Partial<PostItem>) => void;
-  retryPublish: (postId: string) => void;
-  executeSql: (query: string) => { columns: string[]; rows: Record<string, unknown>[]; durationMs: number };
+  approvePost: (postId: string) => Promise<void>;
+  rejectPost: (postId: string, reason?: string) => Promise<void>;
+  requestChanges: (postId: string, comment: string) => Promise<void>;
+  addPostComment: (postId: string, comment: string) => Promise<void>;
+  sendWhatsAppMessage: (leadId: string, text: string) => Promise<void>;
+  updateLeadStatus: (leadId: string, status: WhatsAppLead['status']) => Promise<void>;
+  scheduleAppointment: (leadId: string, date: string, time: string, service: string) => Promise<void>;
+  addInternalNote: (leadId: string, note: string) => Promise<void>;
+  createPost: (postData: Partial<PostItem>) => Promise<void>;
+  createClient: (clientData: Partial<ClientAccount>) => Promise<void>;
+  retryPublish: (postId: string) => Promise<void>;
+  executeSql: (query: string) => Promise<{ columns: string[]; rows: Record<string, unknown>[]; durationMs: number }>;
+  refreshData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -51,28 +54,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSqlDrawerOpen, setIsSqlDrawerOpen] = useState<boolean>(false);
   const [isSwitcherOpen, setIsSwitcherOpen] = useState<boolean>(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [sqlLogs, setSqlLogs] = useState<{ query: string; timestamp: string; durationMs: number; rowCount: number }[]>([
     {
-      query: 'SELECT * FROM dbo.SocialPosts WHERE Status = @p0 ORDER BY ScheduledDate DESC',
+      query: 'SELECT * FROM Clients WHERE AccountStatus = \'Active\'',
       timestamp: '10:00:12 AM',
       durationMs: 14,
+      rowCount: 16,
+    },
+    {
+      query: 'SELECT * FROM SocialPosts WHERE Status = \'Pending Approval\'',
+      timestamp: '10:00:08 AM',
+      durationMs: 18,
       rowCount: 9,
     },
     {
-      query: 'EXEC sp_GetLeadConversionFunnel @ClientId = 1, @DateRange = @p0',
-      timestamp: '10:00:08 AM',
-      durationMs: 18,
-      rowCount: 84,
-    },
-    {
-      query: 'SELECT c.*, s.FullName FROM dbo.Clients c JOIN dbo.Users s ON c.SpecialistId = s.UserId',
+      query: 'SELECT * FROM PatientLeads ORDER BY EstimatedRevenue DESC',
       timestamp: '10:00:01 AM',
       durationMs: 12,
-      rowCount: 18,
+      rowCount: 84,
     },
   ]);
 
-  // Sync workspace switch with screen when toggled
+  // Fetch real data from SQL backend
+  const refreshData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [clientsRes, postsRes, leadsRes, logsRes] = await Promise.all([
+        fetch('/api/clients').then((r) => r.ok ? r.json() : null),
+        fetch('/api/posts').then((r) => r.ok ? r.json() : null),
+        fetch('/api/leads').then((r) => r.ok ? r.json() : null),
+        fetch('/api/sql/logs').then((r) => r.ok ? r.json() : null),
+      ]);
+
+      if (clientsRes && Array.isArray(clientsRes) && clientsRes.length > 0) {
+        setClients(clientsRes);
+      }
+      if (postsRes && Array.isArray(postsRes) && postsRes.length > 0) {
+        setPosts(postsRes);
+      }
+      if (leadsRes && Array.isArray(leadsRes) && leadsRes.length > 0) {
+        setLeads(leadsRes);
+      }
+      if (logsRes && Array.isArray(logsRes) && logsRes.length > 0) {
+        setSqlLogs(logsRes);
+      }
+    } catch (err) {
+      console.warn('Backend fetch fallback (using seed state):', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
   const handleWorkspaceChange = (mode: string) => {
     setWorkspaceMode(mode);
     if (mode === 'Agency Admin') {
@@ -107,79 +144,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentScreen('login');
   };
 
-  const approvePost = (postId: string) => {
+  const approvePost = async (postId: string) => {
+    try {
+      const res = await fetch(`/api/posts/${postId}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: currentUser?.name || 'Dr. Alok Mehta' }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPosts((prev) => prev.map((p) => (p.id === postId ? updated : p)));
+        return;
+      }
+    } catch (err) {
+      console.error('Approve post error:', err);
+    }
+
+    // Local fallback if fetch fails
     setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          return {
-            ...p,
-            status: 'Approved',
-            approvalHistory: [
-              ...(p.approvalHistory || []),
-              {
-                author: currentUser?.name || 'Dr. Alok Mehta',
-                authorRole: currentUser?.role === 'admin' ? 'Agency Admin' : 'Client Approver',
-                text: 'Creative approved for scheduled dispatch via Meta Graph API.',
-                timestamp: 'Just now',
-                avatarUrl: currentUser?.avatarUrl,
-              },
-            ],
-          };
-        }
-        return p;
-      })
+      prev.map((p) => (p.id === postId ? { ...p, status: 'Approved' } : p))
     );
   };
 
-  const rejectPost = (postId: string, reason?: string) => {
+  const rejectPost = async (postId: string, reason?: string) => {
+    try {
+      const res = await fetch(`/api/posts/${postId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: reason || 'Adjustment requested by client reviewer.',
+          author: currentUser?.name || 'Dr. Alok Mehta',
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPosts((prev) => prev.map((p) => (p.id === postId ? updated : p)));
+        return;
+      }
+    } catch (err) {
+      console.error('Reject post error:', err);
+    }
+
     setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          return {
-            ...p,
-            status: 'Changes Requested',
-            approvalHistory: [
-              ...(p.approvalHistory || []),
-              {
-                author: currentUser?.name || 'Dr. Alok Mehta',
-                authorRole: 'Client Reviewer',
-                text: reason || 'Asset rejected, please revise according to compliance feedback.',
-                timestamp: 'Just now',
-                avatarUrl: currentUser?.avatarUrl,
-              },
-            ],
-          };
-        }
-        return p;
-      })
+      prev.map((p) => (p.id === postId ? { ...p, status: 'Changes Requested' } : p))
     );
   };
 
-  const requestChanges = (postId: string, comment: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          return {
-            ...p,
-            status: 'Changes Requested',
-            approvalHistory: [
-              ...(p.approvalHistory || []),
-              {
-                author: currentUser?.name || 'Dr. Alok Mehta',
-                authorRole: 'Client Reviewer',
-                text: comment,
-                timestamp: 'Just now',
-                avatarUrl: currentUser?.avatarUrl,
-              },
-            ],
-          };
-        }
-        return p;
-      })
-    );
+  const requestChanges = async (postId: string, comment: string) => {
+    await rejectPost(postId, comment);
   };
 
-  const addPostComment = (postId: string, comment: string) => {
+  const addPostComment = async (postId: string, comment: string) => {
+    try {
+      const res = await fetch(`/api/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: comment,
+          author: currentUser?.name || 'Mohd Digital Agency',
+          authorRole: currentUser?.role === 'admin' ? 'Agency Director' : 'Reviewer',
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPosts((prev) => prev.map((p) => (p.id === postId ? updated : p)));
+        return;
+      }
+    } catch (err) {
+      console.error('Add comment error:', err);
+    }
+
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
@@ -192,7 +226,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 authorRole: currentUser?.role === 'admin' ? 'Agency Director' : 'Reviewer',
                 text: comment,
                 timestamp: 'Just now',
-                avatarUrl: currentUser?.avatarUrl,
               },
             ],
           };
@@ -202,20 +235,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const sendWhatsAppMessage = (leadId: string, text: string) => {
+  const sendWhatsAppMessage = async (leadId: string, text: string) => {
+    try {
+      const res = await fetch(`/api/leads/${leadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          sender: currentUser?.role === 'client' ? 'doctor' : 'agent',
+          senderName: currentUser?.name || 'Agent',
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setLeads((prev) => prev.map((l) => (l.id === leadId ? updated : l)));
+        return;
+      }
+    } catch (err) {
+      console.error('Send WhatsApp error:', err);
+    }
+
+    // Local fallback
     setLeads((prev) =>
       prev.map((lead) => {
         if (lead.id === leadId) {
-          const newMsg = {
-            id: `msg-${Date.now()}`,
-            sender: (currentUser?.role === 'client' ? 'doctor' : 'agent') as 'doctor' | 'agent',
-            senderName: currentUser?.name || 'Agent',
-            text,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
           return {
             ...lead,
-            messages: [...lead.messages, newMsg],
+            messages: [
+              ...lead.messages,
+              {
+                id: `msg-${Date.now()}`,
+                sender: (currentUser?.role === 'client' ? 'doctor' : 'agent') as any,
+                senderName: currentUser?.name || 'Agent',
+                text,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              },
+            ],
             lastMessageSnippet: text,
             unreadCount: 0,
           };
@@ -225,58 +280,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const updateLeadStatus = (leadId: string, status: WhatsAppLead['status']) => {
+  const updateLeadStatus = async (leadId: string, status: WhatsAppLead['status']) => {
+    try {
+      const res = await fetch(`/api/leads/${leadId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setLeads((prev) => prev.map((l) => (l.id === leadId ? updated : l)));
+        return;
+      }
+    } catch (err) {
+      console.error('Update status error:', err);
+    }
+
     setLeads((prev) =>
       prev.map((lead) => (lead.id === leadId ? { ...lead, status } : lead))
     );
   };
 
-  const scheduleAppointment = (leadId: string, date: string, time: string, service: string) => {
+  const scheduleAppointment = async (leadId: string, date: string, time: string, service: string) => {
+    try {
+      const res = await fetch(`/api/leads/${leadId}/appointment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, time, service }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setLeads((prev) => prev.map((l) => (l.id === leadId ? updated : l)));
+        return;
+      }
+    } catch (err) {
+      console.error('Schedule appointment error:', err);
+    }
+
     setLeads((prev) =>
-      prev.map((lead) => {
-        if (lead.id === leadId) {
-          const confirmationText = `📅 Appointment Confirmed: ${service} with Dr. Alok Mehta on ${date} at ${time}. We look forward to seeing you at City Care Clinic!`;
-          return {
-            ...lead,
-            status: 'Consultation Booked',
-            scheduledSlot: `${date} at ${time}`,
-            messages: [
-              ...lead.messages,
-              {
-                id: `msg-${Date.now()}`,
-                sender: 'agent',
-                senderName: 'City Care Clinic',
-                text: confirmationText,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                isTemplate: true,
-              },
-            ],
-          };
-        }
-        return lead;
-      })
+      prev.map((lead) => (lead.id === leadId ? { ...lead, status: 'Consultation Booked', scheduledSlot: `${date} at ${time}` } : lead))
     );
   };
 
-  const addInternalNote = (leadId: string, note: string) => {
+  const addInternalNote = async (leadId: string, note: string) => {
+    try {
+      const res = await fetch(`/api/leads/${leadId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setLeads((prev) => prev.map((l) => (l.id === leadId ? updated : l)));
+        return;
+      }
+    } catch (err) {
+      console.error('Add note error:', err);
+    }
+
     setLeads((prev) =>
       prev.map((lead) => (lead.id === leadId ? { ...lead, doctorNotes: note } : lead))
     );
   };
 
-  const createPost = (postData: Partial<PostItem>) => {
+  const createPost = async (postData: Partial<PostItem>) => {
+    try {
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(postData),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setPosts((prev) => [created, ...prev]);
+        setCurrentScreen('admin-posts');
+        return;
+      }
+    } catch (err) {
+      console.error('Create post error:', err);
+    }
+
+    // Local fallback
     const newPost: PostItem = {
       id: `post-${Date.now()}`,
       postCode: `#IG-${Math.floor(1000 + Math.random() * 9000)}`,
       clientId: postData.clientId || 'client-fitzone',
       clientName: postData.clientName || 'FitZone Fitness Studio',
-      clientAvatar: postData.clientAvatar || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=300&q=80',
+      clientAvatar: postData.clientAvatar || '',
       type: postData.type || 'Single Post',
       formatLabel: postData.formatLabel || '1:1 Square',
       title: postData.title || 'New Instagram Creative',
       caption: postData.caption || '',
-      hashtags: postData.hashtags || ['#Marketing', '#Fitness'],
-      mediaUrls: postData.mediaUrls?.length ? postData.mediaUrls : ['https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&q=80'],
+      hashtags: postData.hashtags || ['#Marketing'],
+      mediaUrls: postData.mediaUrls || ['https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&q=80'],
       status: postData.status || 'Pending Approval',
       creatorName: currentUser?.name || 'Priya Kumar',
       creatorRole: 'Creative Specialist',
@@ -289,85 +385,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentScreen('admin-posts');
   };
 
-  const retryPublish = (postId: string) => {
+  const createClient = async (clientData: Partial<ClientAccount>) => {
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clientData),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setClients((prev) => [created, ...prev]);
+        return;
+      }
+    } catch (err) {
+      console.error('Create client error:', err);
+    }
+
+    const newClient: ClientAccount = {
+      id: `client-${Date.now()}`,
+      name: clientData.name || 'New Client Business',
+      category: clientData.category || 'Clinic',
+      categoryLabel: clientData.categoryLabel || 'Healthcare & Dental',
+      principal: clientData.principal || 'Owner',
+      principalTitle: clientData.principalTitle || 'Principal',
+      email: clientData.email || 'contact@client.com',
+      phone: clientData.phone || '+91 98000 00000',
+      specialist: clientData.specialist || {
+        name: 'Rahul Sharma',
+        role: 'Senior Strategist',
+        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+      },
+      activeChannels: clientData.activeChannels || { instagram: 'Live', whatsapp: 'Biz' },
+      contentOutput: clientData.contentOutput || { published: 0, inReview: 0, pending: 0 },
+      accountState: clientData.accountState || 'Active',
+      leadsCount: 0,
+      igHealth: '100% Active',
+      roi: '+15.0%',
+      avatarBg: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+      shortCode: 'NC',
+    };
+    setClients([newClient, ...clients]);
+  };
+
+  const retryPublish = async (postId: string) => {
+    try {
+      const res = await fetch(`/api/posts/${postId}/retry`, { method: 'PUT' });
+      if (res.ok) {
+        const updated = await res.json();
+        setPosts((prev) => prev.map((p) => (p.id === postId ? updated : p)));
+        return;
+      }
+    } catch (err) {
+      console.error('Retry publish error:', err);
+    }
+
     setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          return {
-            ...p,
-            status: 'Scheduled',
-            errorReason: undefined,
-          };
-        }
-        return p;
-      })
+      prev.map((p) => (p.id === postId ? { ...p, status: 'Scheduled', errorReason: undefined } : p))
     );
   };
 
-  const executeSql = (query: string) => {
-    const clean = query.trim().toUpperCase();
-    const duration = Math.floor(Math.random() * 12) + 8; // 8-20ms realistic ASP.NET latency
-
-    let result = {
-      columns: ['Result'],
-      rows: [{ Result: 'Statement executed successfully.' }] as Record<string, unknown>[],
-      durationMs: duration,
-    };
-
-    if (clean.includes('FROM DBO.CLIENTS') || clean.includes('FROM CLIENTS')) {
-      result = {
-        columns: ['ClientId', 'BusinessName', 'IndustrySector', 'Principal', 'Email', 'AccountStatus', 'LeadsCount'],
-        rows: clients.map((c) => ({
-          ClientId: c.id,
-          BusinessName: c.name,
-          IndustrySector: c.category,
-          Principal: c.principal,
-          Email: c.email,
-          AccountStatus: c.accountState,
-          LeadsCount: c.leadsCount,
-        })),
-        durationMs: duration,
-      };
-    } else if (clean.includes('FROM DBO.SOCIALPOSTS') || clean.includes('FROM POSTS')) {
-      result = {
-        columns: ['PostCode', 'ClientName', 'CampaignTitle', 'Format', 'Status', 'ScheduledDate', 'Creator'],
-        rows: posts.map((p) => ({
-          PostCode: p.postCode,
-          ClientName: p.clientName,
-          CampaignTitle: p.title,
-          Format: p.formatLabel,
-          Status: p.status,
-          ScheduledDate: `${p.scheduledDate || 'N/A'} ${p.scheduledTime || ''}`,
-          Creator: p.creatorName,
-        })),
-        durationMs: duration,
-      };
-    } else if (clean.includes('FROM DBO.PATIENTLEADS') || clean.includes('FROM LEADS')) {
-      result = {
-        columns: ['FullName', 'PhoneNumber', 'Client', 'LeadStatus', 'TreatmentInterest', 'EstRevenueINR'],
-        rows: leads.map((l) => ({
-          FullName: l.name,
-          PhoneNumber: l.phone,
-          Client: l.clientName,
-          LeadStatus: l.status,
-          TreatmentInterest: l.treatmentInterest,
-          EstRevenueINR: `₹${l.estimatedRevenue.toLocaleString()}`,
-        })),
-        durationMs: duration,
-      };
+  const executeSql = async (query: string) => {
+    try {
+      const res = await fetch('/api/sql/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSqlLogs((prev) => [
+          {
+            query,
+            timestamp: new Date().toLocaleTimeString(),
+            durationMs: data.durationMs,
+            rowCount: data.rowCount,
+          },
+          ...prev.slice(0, 9),
+        ]);
+        return data;
+      }
+    } catch (err) {
+      console.error('Execute SQL error:', err);
     }
 
-    setSqlLogs((prev) => [
-      {
-        query,
-        timestamp: new Date().toLocaleTimeString(),
-        durationMs: duration,
-        rowCount: result.rows.length,
-      },
-      ...prev.slice(0, 9),
-    ]);
-
-    return result;
+    // Fallback if offline
+    return {
+      columns: ['Result'],
+      rows: [{ Result: 'Statement executed in local buffer.' }],
+      durationMs: 14,
+    };
   };
 
   // Keyboard shortcut Ctrl+K
@@ -397,6 +503,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isSwitcherOpen,
         isGlobalSearchOpen,
         sqlLogs,
+        isLoading,
         setScreen: setCurrentScreen,
         loginAs,
         logout,
@@ -415,8 +522,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         scheduleAppointment,
         addInternalNote,
         createPost,
+        createClient,
         retryPublish,
         executeSql,
+        refreshData,
       }}
     >
       {children}

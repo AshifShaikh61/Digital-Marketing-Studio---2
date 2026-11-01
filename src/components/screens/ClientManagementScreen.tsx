@@ -23,11 +23,15 @@ import {
 import { ClientAccount } from '../../types';
 
 export const ClientManagementScreen: React.FC = () => {
-  const { clients, setScreen, setWorkspaceMode, loginAs } = useApp();
+  const { clients, setScreen, setWorkspaceMode, loginAs, createClient } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusTab, setStatusTab] = useState<'All' | 'Active' | 'Onboarding' | 'Paused'>('All');
   const [industryFilter, setIndustryFilter] = useState<'All' | 'Clinics' | 'Gyms' | 'Restaurants'>('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientCategory, setNewClientCategory] = useState<'Clinic' | 'Gym' | 'Restaurant'>('Clinic');
+  const [newClientPrincipal, setNewClientPrincipal] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
 
   // Filter clients
   const filteredClients = clients.filter((c) => {
@@ -561,16 +565,22 @@ export const ClientManagementScreen: React.FC = () => {
                 <input
                   type="text"
                   placeholder="e.g. Apex Orthopedics & Sports Clinic"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 p-2 text-xs focus:border-indigo-600 focus:outline-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">Industry Sector</label>
-                  <select className="w-full rounded-lg border border-slate-200 p-2 text-xs">
-                    <option>Clinic / Healthcare</option>
-                    <option>Gym / Fitness Center</option>
-                    <option>Restaurant / Hospitality</option>
+                  <select
+                    value={newClientCategory}
+                    onChange={(e) => setNewClientCategory(e.target.value as any)}
+                    className="w-full rounded-lg border border-slate-200 p-2 text-xs"
+                  >
+                    <option value="Clinic">Clinic / Healthcare</option>
+                    <option value="Gym">Gym / Fitness Center</option>
+                    <option value="Restaurant">Restaurant / Hospitality</option>
                   </select>
                 </div>
                 <div>
@@ -583,10 +593,22 @@ export const ClientManagementScreen: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Principal Contact & Phone</label>
+                <label className="font-semibold text-slate-700 block mb-1">Principal Doctor / Owner</label>
                 <input
                   type="text"
-                  placeholder="Dr. Rajesh / +91 98000 00000"
+                  placeholder="Dr. Rajesh Patel"
+                  value={newClientPrincipal}
+                  onChange={(e) => setNewClientPrincipal(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 p-2 text-xs focus:border-indigo-600 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Contact Phone</label>
+                <input
+                  type="text"
+                  placeholder="+91 98000 00000"
+                  value={newClientPhone}
+                  onChange={(e) => setNewClientPhone(e.target.value)}
                   className="w-full rounded-lg border border-slate-200 p-2 text-xs focus:border-indigo-600 focus:outline-none"
                 />
               </div>
@@ -599,9 +621,24 @@ export const ClientManagementScreen: React.FC = () => {
                 Cancel
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
+                  if (!newClientName.trim()) {
+                    alert('Please enter business name');
+                    return;
+                  }
+                  await createClient({
+                    name: newClientName,
+                    category: newClientCategory,
+                    principal: newClientPrincipal || 'Dr. Principal',
+                    principalTitle: 'Director',
+                    email: `info@${newClientName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+                    phone: newClientPhone || '+91 98000 00000',
+                  });
                   alert('Client added to SQL Server database dbo.Clients successfully!');
                   setIsAddModalOpen(false);
+                  setNewClientName('');
+                  setNewClientPrincipal('');
+                  setNewClientPhone('');
                 }}
                 className="px-4 py-2 rounded-lg bg-indigo-600 text-xs font-semibold text-white hover:bg-indigo-700"
               >

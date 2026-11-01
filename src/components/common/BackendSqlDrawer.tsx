@@ -33,9 +33,13 @@ export const BackendSqlDrawer: React.FC = () => {
 
   if (!isSqlDrawerOpen) return null;
 
-  const handleRunQuery = () => {
-    const res = executeSql(customQuery);
-    setQueryResult(res);
+  const handleRunQuery = async () => {
+    try {
+      const res = await executeSql(customQuery);
+      setQueryResult(res);
+    } catch (err) {
+      console.error('SQL query execution failed:', err);
+    }
   };
 
   const handleRunEndpoint = () => {
