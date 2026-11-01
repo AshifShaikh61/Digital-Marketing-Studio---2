@@ -269,7 +269,7 @@ export const AgencyOverviewScreen: React.FC = () => {
             </span>
             <span className="flex items-center gap-1.5 font-mono text-[11px] text-indigo-600">
               <Clock className="h-3.5 w-3.5" />
-              API Latency: <strong>18ms via ASP.NET Web API</strong>
+              API Latency: <strong>14ms via Express REST API</strong>
             </span>
           </div>
         </div>
@@ -631,19 +631,19 @@ export const AgencyOverviewScreen: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {/* ASP.NET Core */}
+              {/* Node.js Express */}
               <div className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/70">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded bg-indigo-100 text-indigo-700 font-bold text-xs">
-                    C#
+                  <div className="p-2 rounded bg-emerald-100 text-emerald-700 font-bold text-xs font-mono">
+                    TS
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900">ASP.NET Core Web API</div>
+                    <div className="text-xs font-bold text-slate-900">Node.js Express REST API</div>
                     <div className="text-[10px] text-slate-500">Core Microservices Backend</div>
                   </div>
                 </div>
                 <span className="flex items-center gap-1 text-xs font-mono font-bold text-slate-800">
-                  18ms <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                  14ms <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                 </span>
               </div>
 

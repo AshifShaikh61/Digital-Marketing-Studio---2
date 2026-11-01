@@ -55,7 +55,7 @@ export const LoginScreen: React.FC = () => {
           className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
         >
           <Database className="h-3.5 w-3.5 text-emerald-600" />
-          <span>ASP.NET & SQL Console</span>
+          <span>Express & SQL Console</span>
         </button>
       </div>
 
@@ -255,7 +255,7 @@ export const LoginScreen: React.FC = () => {
             <span>JWT Authentication</span>
           </div>
           <div className="text-[10px] text-slate-500 font-mono">
-            ASP.NET Core & SQL Server
+            Node.js Express & SQL Database
           </div>
           <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 pt-1">
             <a href="#terms" className="hover:underline">Terms of Service</a>

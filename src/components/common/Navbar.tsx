@@ -85,14 +85,14 @@ export const Navbar: React.FC = () => {
           <span className="rounded bg-indigo-200/80 px-1 py-0.2 text-[10px] font-bold">ALL</span>
         </button>
 
-        {/* ASP.NET & SQL Server Live Console Toggle */}
+        {/* Node.js & SQL Database Live Console Toggle */}
         <button
           onClick={() => setIsSqlDrawerOpen(true)}
           className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition shadow-xs group"
-          title="Inspect ASP.NET Core Web API and SQL Server database queries"
+          title="Inspect Node.js Express API and SQL database queries"
         >
           <Database className="h-3.5 w-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
-          <span className="hidden lg:inline font-mono text-[11px] text-slate-600">.NET & SQL</span>
+          <span className="hidden lg:inline font-mono text-[11px] text-slate-600">Express & SQL</span>
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
         </button>
 

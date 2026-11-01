@@ -26,7 +26,7 @@ const SCREENS: ScreenDef[] = [
     number: 1,
     title: 'Enterprise B2B Login Portal',
     category: 'Auth',
-    description: 'Agency Staff and Client Portal sign-in with 1-click demo credentials and ASP.NET Core security banner.',
+    description: 'Agency Staff and Client Portal sign-in with 1-click demo credentials and secure role-based session control.',
     badge: 'Auth',
   },
   {

@@ -369,7 +369,7 @@ export const Sidebar: React.FC = () => {
       {/* Footer Settings & Logout */}
       <div className="p-4 border-t border-slate-100 space-y-1">
         <button
-          onClick={() => alert('System Settings: ASP.NET Core microservices, Webhooks v19.0, Multi-tenant SQL server connection.')}
+          onClick={() => alert('System Settings: Node.js Express REST API, Webhooks v19.0, Persistent SQLite Database connection.')}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
         >
           <Settings className="h-4 w-4 text-slate-400" />

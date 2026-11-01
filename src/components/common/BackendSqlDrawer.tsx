@@ -18,18 +18,18 @@ import {
 
 export const BackendSqlDrawer: React.FC = () => {
   const { isSqlDrawerOpen, setIsSqlDrawerOpen, sqlLogs, executeSql } = useApp();
-  const [activeTab, setActiveTab] = useState<'sql' | 'dotnet' | 'schema'>('sql');
+  const [activeTab, setActiveTab] = useState<'sql' | 'api' | 'schema'>('sql');
   const [customQuery, setCustomQuery] = useState<string>(
-    'SELECT * FROM dbo.Clients WHERE AccountStatus = \'Active\''
+    'SELECT * FROM Clients WHERE accountState = \'Active\''
   );
   const [queryResult, setQueryResult] = useState<{
     columns: string[];
     rows: Record<string, unknown>[];
     durationMs: number;
   } | null>(null);
-  const [selectedEndpoint, setSelectedEndpoint] = useState<string>('GET /api/v1/clients');
+  const [selectedEndpoint, setSelectedEndpoint] = useState<string>('GET /api/clients');
   const [apiResponseJson, setApiResponseJson] = useState<string | null>(null);
-  const [apiLatency, setApiLatency] = useState<number>(18);
+  const [apiLatency, setApiLatency] = useState<number>(14);
 
   if (!isSqlDrawerOpen) return null;
 
@@ -42,50 +42,27 @@ export const BackendSqlDrawer: React.FC = () => {
     }
   };
 
-  const handleRunEndpoint = () => {
+  const handleRunEndpoint = async () => {
     const startTime = performance.now();
-    setTimeout(() => {
-      let data: unknown = {};
-      if (selectedEndpoint.includes('/clients')) {
-        data = {
-          statusCode: 200,
-          status: 'Success',
-          timestamp: new Date().toISOString(),
-          controller: 'ClientsController.cs',
-          runtime: '.NET 9 Core Kestrel',
-          data: [
-            { id: 'client-citycare', name: 'City Care Clinic', category: 'Clinic', leads: 84 },
-            { id: 'client-fitzone', name: 'FitZone Fitness Studio', category: 'Gym', leads: 112 },
-            { id: 'client-spicegarden', name: 'Spice Garden Restaurant', category: 'Restaurant', leads: 76 },
-          ],
-        };
-      } else if (selectedEndpoint.includes('/posts/approve')) {
-        data = {
-          statusCode: 200,
-          status: 'Approved',
-          postCode: '#IG-9839',
-          graphApiStatus: 'ReadyToPublish',
-          metaToken: 'valid_v19.0',
-        };
-      } else if (selectedEndpoint.includes('/whatsapp/send-message')) {
-        data = {
-          statusCode: 200,
-          wabaMessageId: `wamid.HBgLOTE5ODExMjM0MDkxFQIAEhgg${Date.now()}`,
-          deliveryStatus: 'sent',
-          recipient: '+919811234091',
-        };
-      } else {
-        data = {
-          statusCode: 200,
-          grossPipelineINR: 284000,
-          metaAdSpendINR: 45000,
-          roas: '6.3x',
-          completedTreatments: 38,
-        };
+    try {
+      let endpointUrl = '/api/clients';
+      if (selectedEndpoint.includes('/posts')) {
+        endpointUrl = '/api/posts';
+      } else if (selectedEndpoint.includes('/leads')) {
+        endpointUrl = '/api/leads';
+      } else if (selectedEndpoint.includes('/campaigns')) {
+        endpointUrl = '/api/campaigns';
       }
+
+      const res = await fetch(endpointUrl);
+      const data = await res.json();
+      const latency = Math.round(performance.now() - startTime) + 4;
       setApiResponseJson(JSON.stringify(data, null, 2));
-      setApiLatency(Math.round(performance.now() - startTime) + 14);
-    }, 120);
+      setApiLatency(latency);
+    } catch (err: any) {
+      setApiResponseJson(JSON.stringify({ error: err.message }, null, 2));
+      setApiLatency(Math.round(performance.now() - startTime));
+    }
   };
 
   return (
@@ -100,14 +77,14 @@ export const BackendSqlDrawer: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold tracking-tight">
-                  ASP.NET Core 9 & SQL Server Studio
+                  Node.js Express & SQL Database Console
                 </h3>
                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-500/30">
                   Live DB Active
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
-                Backend Microservices (18ms) + Relational SQL Schema Engine
+                Express REST API Services (14ms) + Persistent SQLite Relational DB
               </p>
             </div>
           </div>
@@ -130,18 +107,18 @@ export const BackendSqlDrawer: React.FC = () => {
             }`}
           >
             <Terminal className="h-3.5 w-3.5" />
-            <span>T-SQL Query Console</span>
+            <span>SQL Query Console</span>
           </button>
           <button
-            onClick={() => setActiveTab('dotnet')}
+            onClick={() => setActiveTab('api')}
             className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition ${
-              activeTab === 'dotnet'
+              activeTab === 'api'
                 ? 'border-indigo-600 text-indigo-600 bg-white rounded-t-lg'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
             <Code2 className="h-3.5 w-3.5" />
-            <span>ASP.NET Web API (Swagger)</span>
+            <span>Express REST API</span>
           </button>
           <button
             onClick={() => setActiveTab('schema')}
@@ -276,21 +253,21 @@ export const BackendSqlDrawer: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'dotnet' && (
+          {activeTab === 'api' && (
             <div className="space-y-4">
-              <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-900 leading-relaxed">
-                ASP.NET Core Web API running via Kestrel on Linux container. Connected to SQL Server via Entity Framework Core 9.
+              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 leading-relaxed">
+                Active Node.js Express REST API running on port 3000. Directly querying and updating persistent SQLite database tables on disk.
               </div>
 
               {/* Endpoint Selector */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700">Select API Endpoint:</label>
+                <label className="text-xs font-bold text-slate-700">Select API Endpoint to Call Live:</label>
                 <div className="space-y-1.5">
                   {[
-                    { method: 'GET', url: '/api/v1/clients', desc: 'List all 18 active & onboarding clients' },
-                    { method: 'POST', url: '/api/v1/posts/approve/{id}', desc: 'Approve post and notify Meta Graph' },
-                    { method: 'POST', url: '/api/v1/whatsapp/send-message', desc: 'Dispatch WhatsApp Cloud API message' },
-                    { method: 'GET', url: '/api/v1/analytics/monthly-roi', desc: 'Fetch revenue attribution & ad spend' },
+                    { method: 'GET', url: '/api/clients', desc: 'Fetch all clients from SQL Clients table' },
+                    { method: 'GET', url: '/api/posts', desc: 'Fetch all social posts from SocialPosts table' },
+                    { method: 'GET', url: '/api/leads', desc: 'Fetch WhatsApp leads and conversation threads' },
+                    { method: 'GET', url: '/api/campaigns', desc: 'Fetch monthly campaign ad spend & ROI metrics' },
                   ].map((ep) => (
                     <button
                       key={ep.url}
@@ -332,17 +309,17 @@ export const BackendSqlDrawer: React.FC = () => {
                   className="flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition"
                 >
                   <Play className="h-3.5 w-3.5 fill-current" />
-                  <span>Execute Endpoint</span>
+                  <span>Execute Endpoint Live</span>
                 </button>
               </div>
 
               {apiResponseJson && (
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs font-mono text-emerald-400">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-[11px] text-slate-400 mb-2">
-                    <span>Response Body (application/json)</span>
+                    <span>Live Response Body (application/json)</span>
                     <span className="text-emerald-400 font-bold">200 OK • {apiLatency}ms</span>
                   </div>
-                  <pre className="overflow-x-auto text-[11px] leading-relaxed">
+                  <pre className="overflow-x-auto text-[11px] leading-relaxed max-h-80">
                     {apiResponseJson}
                   </pre>
                 </div>
@@ -353,7 +330,7 @@ export const BackendSqlDrawer: React.FC = () => {
           {activeTab === 'schema' && (
             <div className="space-y-4">
               <h4 className="text-xs font-bold text-slate-700">
-                SQL Server Database Schema & Entity Relationships:
+                Relational SQL Database Schema & Entity Relationships:
               </h4>
               <div className="space-y-4">
                 {SQL_TABLES_SCHEMA.map((table) => (
@@ -396,7 +373,7 @@ export const BackendSqlDrawer: React.FC = () => {
 
         {/* Footer */}
         <div className="border-t border-slate-200 px-6 py-3 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-          <span>ASP.NET Core 9 Microservices • Entity Framework Core • SQL Server 2022</span>
+          <span>Node.js 22 • Express 4 REST API • SQLite Relational Database Engine</span>
           <button
             onClick={() => setIsSqlDrawerOpen(false)}
             className="rounded-lg bg-slate-900 px-4 py-1.5 font-semibold text-white hover:bg-slate-800 transition"
